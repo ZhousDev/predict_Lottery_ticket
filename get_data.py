@@ -3,14 +3,17 @@
 Author: BigCat
 """
 import argparse
-import requests
+import datetime
+
 import pandas as pd
+import requests
 from bs4 import BeautifulSoup
 from loguru import logger
+
 from config import os, name_path, data_file_name
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--name', default="ssq", type=str, help="选择爬取数据: 双色球/大乐透")
+parser.add_argument('--name', default="max", type=str, help="选择爬取数据: 双色球/大乐透")
 args = parser.parse_args()
 
 
@@ -19,21 +22,39 @@ def get_url(name):
     :param name: 玩法名称
     :return:
     """
-    url = "https://datachart.500.com/{}/history/".format(name)
-    path = "newinc/history.php?start={}&end="
-    return url, path
+    if name == "ssq" or name == "dlt":
+        url = "https://datachart.500.com/{}/history/".format(name)
+        path = "newinc/history.php?start={}&end="
+        return url, path
+    elif name == "649" or name == "max":
+        url = "https://www.lottodatabase.com/lotto-database/canadian-lotteries/lotto-{}".format(name)
+        path = "/draw-history/{}"
+        return url, path
 
 
 def get_current_number(name):
     """ 获取最新一期数字
     :return: int
     """
-    url, _ = get_url(name)
-    r = requests.get("{}{}".format(url, "history.shtml"), verify=False)
-    r.encoding = "gb2312"
-    soup = BeautifulSoup(r.text, "lxml")
-    current_num = soup.find("div", class_="wrap_datachart").find("input", id="end")["value"]
-    return current_num
+    if name == "ssq" or name == "dlt":
+        url, _ = get_url(name)
+        r = requests.get("{}{}".format(url, "history.shtml"), verify=False)
+        r.encoding = "gb2312"
+        soup = BeautifulSoup(r.text, "lxml")
+        current_num = soup.find("div", class_="wrap_datachart").find("input", id="end")["value"]
+        return current_num
+    elif name == "649" or name == "max":
+        url, _ = get_url(name)
+        r = requests.get("{}{}".format(url, "/draw-history/2023"), verify=False)
+        r.encoding = "utf-8"
+        soup = BeautifulSoup(r.text, "lxml")
+        divs = soup.find_all('div', class_='section group')
+        for div in divs:
+            data = div.find_next('div', class_='col s_8_12')
+            if data is not None:
+                date = data.find('div', class_='col s_3_12').text.strip()
+                return date
+        return None
 
 
 def spider(name, start, end, mode):
@@ -56,19 +77,62 @@ def spider(name, start, end, mode):
         if name == "ssq":
             item[u"期数"] = tr.find_all("td")[0].get_text().strip()
             for i in range(6):
-                item[u"红球_{}".format(i+1)] = tr.find_all("td")[i+1].get_text().strip()
+                item[u"红球_{}".format(i + 1)] = tr.find_all("td")[i + 1].get_text().strip()
             item[u"蓝球"] = tr.find_all("td")[7].get_text().strip()
             data.append(item)
         elif name == "dlt":
             item[u"期数"] = tr.find_all("td")[0].get_text().strip()
             for i in range(5):
-                item[u"红球_{}".format(i+1)] = tr.find_all("td")[i+1].get_text().strip()
+                item[u"红球_{}".format(i + 1)] = tr.find_all("td")[i + 1].get_text().strip()
             for j in range(2):
-                item[u"蓝球_{}".format(j+1)] = tr.find_all("td")[6+j].get_text().strip()
+                item[u"蓝球_{}".format(j + 1)] = tr.find_all("td")[6 + j].get_text().strip()
             data.append(item)
         else:
             logger.warning("抱歉，没有找到数据源！")
 
+    if mode == "train":
+        df = pd.DataFrame(data)
+        df.to_csv("{}{}".format(name_path[name]["path"], data_file_name), encoding="utf-8")
+        return pd.DataFrame(data)
+    elif mode == "predict":
+        return pd.DataFrame(data)
+
+
+def spider_ca(name, startYear, endYear, mode):
+    url, path = get_url(name)
+    data = []
+    for year in range(endYear, startYear - 1, -1):
+        urlTemp = "{}{}".format(url, path.format(year))
+        print(urlTemp)
+        r = requests.get(url=urlTemp, verify=False)
+        r.encoding = "utf-8"
+        soup = BeautifulSoup(r.text, "lxml")
+        divs = soup.find_all('div', class_='section group')
+
+        divs = divs[0].find_next('div', class_='col s_8_12')
+        divs = divs.find_all('div', class_='section group')
+        for div in divs:
+            # item = dict()
+            item = {}
+            date = div.find('div', class_='col s_3_12').text.strip()
+            balls = div.find_all('span', class_='white ball')
+            bonusList = div.find_all('span', class_='grey ball')
+            # 如果包含bonus字符串，就去掉
+
+
+            item[u'期数'] = date
+            i = 1
+            for ball in balls:
+                item[u'白球_{}'.format(i)] = ball.text
+                i += 1
+            i = 1
+            for bonus in bonusList:
+                bonusStr = bonus.text
+                if bonusStr.find('Bonus') != -1:
+                    bonusStr = bonusStr.replace('Bonus', '')
+                item[u'灰球_{}'.format(i)] = bonusStr
+                i += 1
+            data.append(item)
     if mode == "train":
         df = pd.DataFrame(data)
         df.to_csv("{}{}".format(name_path[name]["path"], data_file_name), encoding="utf-8")
@@ -87,7 +151,12 @@ def run(name):
     logger.info("正在获取【{}】数据。。。".format(name_path[name]["name"]))
     if not os.path.exists(name_path[name]["path"]):
         os.makedirs(name_path[name]["path"])
-    data = spider(name, 1, current_number, "train")
+    if name == "ssq" or name == "dlt":
+        data = spider(name, 1, current_number, "train")
+    elif name == "649":
+        data = spider_ca(name, 1982, datetime.datetime.now().year, "train")
+    elif name == "max":
+        data = spider_ca(name, 2009, datetime.datetime.now().year, "train")
     if "data" in os.listdir(os.getcwd()):
         logger.info("【{}】数据准备就绪，共{}期, 下一步可训练模型...".format(name_path[name]["name"], len(data)))
     else:

@@ -19,6 +19,14 @@ name_path = {
     "dlt": {
         "name": "大乐透",
         "path": "data/dlt/"
+    },
+    "649": {
+        "name": "649",
+        "path": "data/649/"
+    },
+    "max": {
+        "name": "max",
+        "path": "data/max/"
     }
 }
 
