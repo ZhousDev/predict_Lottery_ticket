@@ -123,14 +123,14 @@ def spider_ca(name, startYear, endYear, mode):
             item[u'期数'] = date
             i = 1
             for ball in balls:
-                item[u'白球_{}'.format(i)] = ball.text
+                item[u'红球_{}'.format(i)] = ball.text
                 i += 1
-            i = 1
+
             for bonus in bonusList:
                 bonusStr = bonus.text
                 if bonusStr.find('Bonus') != -1:
                     bonusStr = bonusStr.replace('Bonus', '')
-                item[u'灰球_{}'.format(i)] = bonusStr
+                item[u'红球_{}'.format(i)] = bonusStr
                 i += 1
             data.append(item)
     if mode == "train":

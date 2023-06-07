@@ -95,7 +95,50 @@ model_args = {
             "red": model_path + "/dlt/red_ball_model/",
             "blue": model_path + "/dlt/blue_ball_model/"
         }
-    }
+    },
+    "649": {
+        "model_args": {
+            "windows_size": 3,
+            "batch_size": 1,
+            "sequence_len": 7,
+            "red_n_class": 49,
+            "red_epochs": 1,
+            "red_embedding_size": 32,
+            "red_hidden_size": 32,
+            "red_layer_size": 1,
+        },
+        "train_args": {
+            "red_learning_rate": 0.001,
+            "red_beta1": 0.9,
+            "red_beta2": 0.999,
+            "red_epsilon": 1e-08,
+        },
+        "path": {
+            "red": model_path + "/649/red_ball_model/"
+        }
+    },
+    "max": {
+        "model_args": {
+            "windows_size": 3,
+            "batch_size": 1,
+            "sequence_len": 8,
+            "red_n_class": 50,
+            "red_epochs": 1,
+            "red_embedding_size": 32,
+            "red_hidden_size": 32,
+            "red_layer_size": 1,
+        },
+        "train_args": {
+            "red_learning_rate": 0.001,
+            "red_beta1": 0.9,
+            "red_beta2": 0.999,
+            "red_epsilon": 1e-08,
+        },
+        "path": {
+            "red": model_path + "/max/red_ball_model/"
+        }
+    },
+
 }
 
 # 模型名

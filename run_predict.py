@@ -9,11 +9,11 @@ import datetime
 import numpy as np
 import tensorflow as tf
 from config import *
-from get_data import get_current_number, spider
+from get_data import get_current_number, spider, spider_ca
 from loguru import logger
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--name', default="ssq", type=str, help="选择训练数据: 双色球/大乐透")
+parser.add_argument('--name', default="max", type=str, help="选择训练数据: 双色球/大乐透")
 args = parser.parse_args()
 
 # 关闭eager模式
@@ -48,7 +48,7 @@ def load_model(name):
         current_number = get_current_number(args.name)
         logger.info("【{}】最近一期:{}".format(name_path[args.name]["name"], current_number))
         return red_graph, red_sess, blue_graph, blue_sess, pred_key_d, current_number
-    else:
+    elif name == "dlt":
         red_graph = tf.compat.v1.Graph()
         with red_graph.as_default():
             red_saver = tf.compat.v1.train.import_meta_graph(
@@ -74,7 +74,25 @@ def load_model(name):
         current_number = get_current_number(args.name)
         logger.info("【{}】最近一期:{}".format(name_path[args.name]["name"], current_number))
         return red_graph, red_sess, blue_graph, blue_sess, pred_key_d, current_number
+    else:
+        red_graph = tf.compat.v1.Graph()
+        with red_graph.as_default():
+            red_saver = tf.compat.v1.train.import_meta_graph(
+                "{}red_ball_model.ckpt.meta".format(model_args[args.name]["path"]["red"])
+            )
+        red_sess = tf.compat.v1.Session(graph=red_graph)
+        red_saver.restore(red_sess, "{}red_ball_model.ckpt".format(model_args[args.name]["path"]["red"]))
+        logger.info("已加载红球模型！")
 
+
+
+        # 加载关键节点名
+        with open("{}/{}/{}".format(model_path, args.name, pred_key_name)) as f:
+            pred_key_d = json.load(f)
+
+        current_number = get_current_number(args.name)
+        logger.info("【{}】最近一期:{}".format(name_path[args.name]["name"], current_number))
+        return red_graph, red_sess, None, None, pred_key_d, current_number
 
 def get_year():
     """ 截取年份
@@ -157,7 +175,7 @@ def get_final_result(red_graph, red_sess, blue_graph, blue_sess, pred_key_d, nam
         return {
             b_name: int(res) + 1 for b_name, res in zip(ball_name_list, pred_result_list)
         }
-    else:
+    elif name == "dlt":
         red_pred, red_name_list = get_red_ball_predict_result(
             red_graph, red_sess, pred_key_d,
             predict_features, m_args["red_sequence_len"], m_args["windows_size"]
@@ -171,6 +189,16 @@ def get_final_result(red_graph, red_sess, blue_graph, blue_sess, pred_key_d, nam
         return {
             b_name: int(res) + 1 for b_name, res in zip(ball_name_list, pred_result_list)
         }
+    else:
+        red_pred, red_name_list = get_red_ball_predict_result(
+            red_graph, red_sess, pred_key_d,
+            predict_features, m_args["sequence_len"], m_args["windows_size"]
+        )
+        ball_name_list = ["{}_{}".format(name[mode], i) for name, i in red_name_list] + [ball_name[1][mode]]
+        pred_result_list = red_pred[0].tolist()
+        return {
+            b_name: int(res) + 1 for b_name, res in zip(ball_name_list, pred_result_list)
+        }
 
 
 def run(name):
@@ -178,8 +206,16 @@ def run(name):
     try:
         red_graph, red_sess, blue_graph, blue_sess, pred_key_d, current_number = load_model(name)
         windows_size = model_args[name]["model_args"]["windows_size"]
-        data = spider(name, 1, current_number, "predict")
-        logger.info("【{}】预测期号：{}".format(name_path[name]["name"], int(current_number) + 1))
+        if name == "ssq" or name == "dlt":
+            data = spider(name, 2, current_number, "predict")
+            logger.info("【{}】预测期号：{}".format(name_path[name]["name"], int(current_number) + 1))
+        elif name == "649":
+            data = spider_ca(name, 1983, datetime.datetime.now().year, "predict")
+            logger.info("【{}】预测期号：{}".format(name_path[name]["name"], ""))
+        elif name == "max":
+            data = spider_ca(name, 2009, datetime.datetime.now().year, "predict")
+            logger.info("【{}】预测期号：{}".format(name_path[name]["name"], ""))
+
         predict_features_ = try_error(1, name, data.iloc[:windows_size], windows_size)
         logger.info("预测结果：{}".format(get_final_result(
             red_graph, red_sess, blue_graph, blue_sess, pred_key_d, name, predict_features_))
